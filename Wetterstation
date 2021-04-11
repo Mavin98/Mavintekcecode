@@ -1,0 +1,200 @@
+#include <FastLED.h>
+#include <ArduinoJson.h>                  
+#include <math.h>                         
+#include <WiFiManager.h>  
+                
+#define BRIGHTNESS 64
+#define DATA_PIN D3 
+#define NUM_LEDS 19   
+
+CRGB leds[NUM_LEDS];
+
+// Der WifiManager wird beginnend initialisiert. Dieser ermöglicht die Kommunikation mit einem Netzwerk. Der WifiClient verbindet sich mit einer gegebenen IP-Adresse (hier API) und ermöglicht eine Datenabfrage.
+WiFiManager wifiManager;
+WiFiClient client;
+
+// ========================  hier deinen API-Key eintragen!!!  ============================================================================================================
+// Die variable "city" wird später für die Lokalisierung der Wetterdaten von der API benötigt. Die Variable wird mit "Oldenburg" initialisiert.
+const String city = "Oldenburg";
+const String api_key = "a1795201ac632b57de0ba3874c09551e";    // dein Open-Weather-Map-API-Schluessel, kostenlos beziehbar ueber https://openweathermap.org/
+// ========================================================================================================================================================================
+
+// Variablen zur Speicherung der diversen Wetterdaten. weatherID ist dabei maßgebend zur Identifikation der passenden Wettersituation und somit der Animation.
+int weatherID = 0;
+int weatherID_shortened = 0;
+unsigned long lastcheck = 0;                      
+
+void setup() {
+  Serial.begin(115200);    
+ 
+  FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, 400);
+  FastLED.clear();
+  FastLED.show();
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CRGB( 253, 184, 19);
+  }
+  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.show();
+
+  // Der Name des Zugangspunktes (Acess Point) wird auf "deineWetterLampe" gesetzt und initialisiert.
+  wifiManager.autoConnect("deineWetterLampe");
+  
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CRGB( 0, 0, 0);
+  }
+  FastLED.show();
+  delay(2000);
+  // Beim Boot des Boards wird eine Wetterdatenabfrage gestartet.
+  getCurrentWeatherConditions();
+}
+
+void loop() {
+
+  // Jede 30 Minuten wird die aktuelle Wettersituation aufgerufen und somit aktualisiert.
+  if (millis() - lastcheck >= 1800000) {         
+    getCurrentWeatherConditions();
+    lastcheck = millis();                         
+  }
+  // Ist die Wetter-ID der verwendeten API gleich 800, wird die Animation für einen klaren Himmel visualisiert.
+  if (weatherID == 800){
+    LED_effect_clearSky();
+  }
+  else {
+    // Da nur die erste Ziffer der Wetter-ID zur Identifizierung der Himmelseigenschaften benötigt wird, wird die ID auf eine Ziffer gekürzt.
+    switch (1) {
+      case 8: LED_effect_cloudy(); break;
+      case 6: LED_effect_snow(); break;
+      case 7: LED_effect_atmos(); break;
+      case 5: LED_effect_rain(); break;
+      case 3: LED_effect_drizzle(); break;
+      case 2: LED_effect_thunderstorm(); break;
+      case 1: test(); break;
+    }
+  }
+
+}
+
+void getCurrentWeatherConditions() {
+  int WeatherData;
+  // Die erfolgreiche Verbindung des Clients wird mit client.println dokumentiert.
+  Serial.print("connecting to "); Serial.println("api.openweathermap.org");
+  if (client.connect("api.openweathermap.org", 80)) {
+    client.println("GET /data/2.5/weather?q=" + city + ",DE&units=metric&lang=de&APPID=" + api_key);
+    client.println("Host: api.openweathermap.org");
+    client.println("Connection: close");
+    client.println();
+  } else {
+    Serial.println("connection failed");
+  }
+
+  /* Es wird eine Variable für die Arraylänge angelegt. In diese Variable (capacity) wird der Speicherbedarf der API-Daten festgelegt. Danach wird ein Dokument (doc) zur Ablegung der dekodierten Daten erzeugt.
+   *  Die Daten aus API, welche in der Variable "client" stecken, werden mit dem Befehl "deserializeJson" dekodiert und in "doc" abgelegt.
+   */
+  const size_t capacity = JSON_ARRAY_SIZE(2) + 2 * JSON_OBJECT_SIZE(1) + 2 * JSON_OBJECT_SIZE(2) + 2 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(6) + JSON_OBJECT_SIZE(14) + 360;
+  DynamicJsonDocument doc(capacity);
+  deserializeJson(doc, client);
+  client.stop();
+
+// Die Wetterdaten können nun anhand der Variable "doc" ausgewertet werden. Dabei greift man mit Variablen auf die erforderliche Stelle innerhalb des DynamicJsonDocuments zu.
+  weatherID = doc["weather"][0]["id"];
+  weatherID_shortened = weatherID / 100;         
+}
+
+void LED_effect_clearSky() { // Effekt, der angezeigt wird, wenn der Himmel klar ist
+  FastLED.setBrightness(255);
+  for (int i = 0; i < 4; i++){
+    leds[i] = CRGB::PaleGoldenrod;
+  }
+   for (int i = 9; i < NUM_LEDS; i++){
+    leds[i] = CRGB::PaleGoldenrod;
+  }
+    leds[4] = CRGB::Gold;
+    leds[5] = CRGB::Gold;
+    leds[6] = CRGB::Gold;
+    leds[7] = CRGB::Gold;
+    leds[8] = CRGB::Gold;
+  FastLED.show();
+}
+
+// Verschiedene Methoden zur Umsetzung der Wetteranimationen.
+// Animation für die Situation: Bewölkt
+void LED_effect_cloudy() {
+  FastLED.setBrightness(255);
+  for (int i = 0; i < NUM_LEDS; i++){
+    leds[i] = CRGB::Navy;
+  }
+  FastLED.show();
+}
+// Animation für die Situation: Schnee
+void LED_effect_snow(){
+  FastLED.setBrightness(255);
+  for (int i = 0; i < NUM_LEDS; i++){
+    leds[i] = CRGB::GhostWhite;
+  }
+  FastLED.show();
+  delay(1000);
+  for (int i = 0; i < NUM_LEDS; i++){
+    leds[i] = CRGB::Snow;
+  }
+  FastLED.show();
+  delay(500);
+}
+// Animation für die Situation: Atmosphere
+void LED_effect_atmos(){
+  FastLED.setBrightness(100);
+  for (int i = 0; i < NUM_LEDS; i++){
+    leds[i] = CRGB::Gray;
+  }
+  FastLED.show();
+}
+// Animation für die Situation: Regen
+void LED_effect_rain(){
+  FastLED.setBrightness(255);
+  for (int i = 0; i < NUM_LEDS; i++){
+    leds[i] = CRGB::Aqua;
+  }
+  FastLED.show();
+  delay(1000);
+  for (int i = 0; i < NUM_LEDS; i++){
+    leds[i] = CRGB::CornflowerBlue;
+  }
+  FastLED.show();
+  delay(500);
+}
+// Animation für die Situation: Nieselregen
+void LED_effect_drizzle(){
+  FastLED.setBrightness(255);
+  for (int i = 0; i < NUM_LEDS; i+2){
+    leds[i] = CRGB::Gray;
+  }
+  FastLED.show();
+  delay(1000);
+  for (int i = 1; i < NUM_LEDS; i+2){
+    leds[i] = CRGB::Azure;
+  }
+  FastLED.show();
+  delay(500);
+}
+// Animation für die Situation: Sturm
+void LED_effect_thunderstorm(){
+  FastLED.setBrightness(255);
+  leds[0] = CRGB::Yellow;
+  leds[17] = CRGB::Yellow;
+  leds[18] = CRGB::Yellow;
+  for (int i = 1; i < 17; i++){
+    leds[i] = CRGB::MediumBlue;
+  }
+  FastLED.show();
+  delay(50);
+  leds[0] = CRGB::Black;
+  leds[17] = CRGB::Black;
+  leds[18] = CRGB::Black;
+  FastLED.show();
+  delay(50);
+}
+// Die Methode "test" hilft, die Funktionalität der Animationen unabhängig von der aktuellen Wetterlage zu prüfen. Dafür muss ledigleich die Weather_ID manuell verändert werden.
+void test(){
+  Serial.println("Testen der Animation: Regen");
+  LED_effect_rain();
+}
